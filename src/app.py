@@ -1,6 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from pathlib import Path
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -10,8 +12,6 @@ from src.rag.answerer import answer
 from src.rag.ingest import ingest_pdf
 from src.rag.retriever import retrieve
 from src.rag.store import collection
-
-load_dotenv()
 
 UPLOAD_DIR = Path("data/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -49,8 +49,14 @@ async def ingest(file: UploadFile):
 
     try:
         chunks = ingest_pdf(str(save_path))
+    except Exception as e:
+        save_path.unlink(missing_ok=True)
+        return {"status": "error", "message": str(e)}
     finally:
         save_path.unlink(missing_ok=True)
+
+    if chunks == 0:
+        return {"status": "error", "message": "No text could be extracted from this PDF. It may be image-based or scanned."}
 
     return {
         "status": "ingested",
@@ -61,6 +67,9 @@ async def ingest(file: UploadFile):
 
 @app.post("/ask")
 async def ask(body: AskRequest):
-    chunks = retrieve(body.question)
-    result = await answer(body.question, chunks)
-    return result
+    try:
+        chunks = retrieve(body.question)
+        result = await answer(body.question, chunks)
+        return result
+    except Exception as e:
+        return {"answer": f"Error: {e}", "sources": []}

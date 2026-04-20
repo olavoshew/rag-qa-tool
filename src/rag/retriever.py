@@ -5,11 +5,15 @@ DISTANCE_THRESHOLD = 1.5
 
 
 def retrieve(query: str, k: int = 5) -> list[dict]:
+    total = collection.count()
+    if total == 0:
+        return []
+
     query_embedding = embed([query])[0]
 
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=k,
+        n_results=min(k, total),
         include=["documents", "metadatas", "distances"],
     )
 

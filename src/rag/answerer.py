@@ -11,8 +11,16 @@ SYSTEM_PROMPT = (
     "Always cite the source file name and page number."
 )
 
-_api_key = os.getenv("ANTHROPIC_API_KEY")
-_client = Anthropic(api_key=_api_key) if _api_key else None
+_client: Anthropic | None = None
+
+
+def _get_client() -> Anthropic | None:
+    global _client
+    if _client is None:
+        key = os.getenv("ANTHROPIC_API_KEY")
+        if key:
+            _client = Anthropic(api_key=key)
+    return _client
 
 
 def _format_context(chunks: list[dict]) -> str:
@@ -28,14 +36,14 @@ async def answer(question: str, chunks: list[dict]) -> dict:
     if not chunks:
         return {"answer": NOT_FOUND, "sources": []}
 
-    if not _client:
+    if not _get_client():
         return {"answer": "ANTHROPIC_API_KEY not configured.", "sources": []}
 
     context = _format_context(chunks)
     user_message = f"Context:\n\n{context}\n\nQuestion: {question}"
 
-    response = _client.messages.create(
-        model="claude-3-5-haiku-latest",
+    response = _get_client().messages.create(
+        model="claude-haiku-4-5-20251001",
         max_tokens=1024,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_message}],
