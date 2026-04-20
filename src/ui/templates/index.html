@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Document Q&A</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1rem; color: #1a1a1a; }
+        h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+        h2 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #333; }
+        section { margin-bottom: 2rem; padding: 1.25rem; border: 1px solid #ddd; border-radius: 8px; }
+        input[type="file"], input[type="text"] { display: block; width: 100%; padding: 0.5rem; margin-bottom: 0.75rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; }
+        button { padding: 0.5rem 1.25rem; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95rem; }
+        button:hover { background: #1d4ed8; }
+        button:disabled { background: #93c5fd; cursor: not-allowed; }
+        .status { margin-top: 0.75rem; padding: 0.5rem; border-radius: 4px; font-size: 0.9rem; }
+        .status.success { background: #dcfce7; color: #166534; }
+        .status.error { background: #fee2e2; color: #991b1b; }
+        #answer-box { margin-top: 0.75rem; padding: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; display: none; }
+        #answer-text { white-space: pre-wrap; line-height: 1.6; margin-bottom: 0.5rem; }
+        .sources { font-size: 0.85rem; color: #64748b; }
+        .sources span { display: inline-block; background: #e2e8f0; padding: 0.15rem 0.5rem; border-radius: 3px; margin: 0.15rem 0.25rem 0.15rem 0; }
+        .spinner { display: none; margin-left: 0.5rem; }
+        .spinner::after { content: ""; display: inline-block; width: 14px; height: 14px; border: 2px solid #93c5fd; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <h1>RAG Document Q&A</h1>
+
+    <section>
+        <h2>Upload PDF</h2>
+        <form id="upload-form">
+            <input type="file" id="pdf-file" accept=".pdf" required>
+            <button type="submit" id="upload-btn">Upload</button>
+            <span class="spinner" id="upload-spinner"></span>
+        </form>
+        <div id="upload-status"></div>
+    </section>
+
+    <section>
+        <h2>Ask a Question</h2>
+        <form id="ask-form">
+            <input type="text" id="question" placeholder="What would you like to know?" required>
+            <button type="submit" id="ask-btn">Ask</button>
+            <span class="spinner" id="ask-spinner"></span>
+        </form>
+        <div id="answer-box">
+            <div id="answer-text"></div>
+            <div class="sources" id="sources"></div>
+        </div>
+    </section>
+
+    <script>
+        const uploadForm = document.getElementById("upload-form");
+        const askForm = document.getElementById("ask-form");
+
+        uploadForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById("pdf-file");
+            const statusDiv = document.getElementById("upload-status");
+            const btn = document.getElementById("upload-btn");
+            const spinner = document.getElementById("upload-spinner");
+
+            if (!fileInput.files.length) return;
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+
+            btn.disabled = true;
+            spinner.style.display = "inline-block";
+            statusDiv.innerHTML = "";
+
+            try {
+                const res = await fetch("/ingest", { method: "POST", body: formData });
+                const data = await res.json();
+                if (data.status === "ingested") {
+                    statusDiv.innerHTML = `<div class="status success">Ingested ${data.filename} (${data.chunks} chunks)</div>`;
+                } else {
+                    statusDiv.innerHTML = `<div class="status error">${data.message || "Upload failed"}</div>`;
+                }
+            } catch (err) {
+                statusDiv.innerHTML = `<div class="status error">Error: ${err.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                spinner.style.display = "none";
+            }
+        });
+
+        askForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const question = document.getElementById("question").value.trim();
+            const answerBox = document.getElementById("answer-box");
+            const answerText = document.getElementById("answer-text");
+            const sourcesDiv = document.getElementById("sources");
+            const btn = document.getElementById("ask-btn");
+            const spinner = document.getElementById("ask-spinner");
+
+            if (!question) return;
+
+            btn.disabled = true;
+            spinner.style.display = "inline-block";
+            answerBox.style.display = "none";
+
+            try {
+                const res = await fetch("/ask", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ question }),
+                });
+                const data = await res.json();
+                answerText.textContent = data.answer;
+                sourcesDiv.innerHTML = data.sources.length
+                    ? "Sources: " + data.sources.map(s => `<span>${s.source}, p.${s.page}</span>`).join("")
+                    : "";
+                answerBox.style.display = "block";
+            } catch (err) {
+                answerText.textContent = "Error: " + err.message;
+                sourcesDiv.innerHTML = "";
+                answerBox.style.display = "block";
+            } finally {
+                btn.disabled = false;
+                spinner.style.display = "none";
+            }
+        });
+    </script>
+</body>
+</html>
