@@ -9,6 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY --chown=user . .
 
+RUN mkdir -p /app/data/chroma /app/data/uploads && chown -R user:user /app/data
+
 USER user
 
 ENV HOME=/home/user \
